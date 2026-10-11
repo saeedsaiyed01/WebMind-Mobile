@@ -13,6 +13,18 @@
 - The Markdown parser was upgraded to 14.3.2 through a scoped dependency override. The remaining npm advisories involve the SDK/build toolchain; no incompatible SDK downgrade was applied.
 - Real Google account consent and a purchase have not been exercised.
 
+### Final release artifact
+
+- EAS build `3d989529-b9ce-40d3-b85d-bed94c8695d7` finished successfully from source commit `f2576fbef3acdf76d533c913d8010ac694404d76`.
+- Version 1.1.0, Android version code 2; minimum API 24, target API 36.
+- APK: 59,119,944 bytes (56.4 MiB), 46% smaller than the initial unoptimized 1.1.0 build (109,382,142 bytes).
+- Packaged architectures: ARM64 and x86-64. Packaged fonts: 6 files, 2,543,440 bytes. Hermes bundle: 4,239,624 bytes.
+- SHA-256: `83712b0e0331b061ade93e25fe4a09d7affa4b5af66a19ce3a8b466fc3a8208b`.
+- APK Signature Scheme v2 verified. Signing certificate SHA-256 matches the original release: `a557f4e283b837ce5e6ab00a01511f0f31be32b0712a76d931acce67bc3a634a`.
+- This exact optimized APK installed successfully as an update. Native session restoration, composer/send positioning above the keyboard, draft preservation, dark model sheet, attachment search with the keyboard, and saved appearance after restart passed without native crashes.
+- Opening the model picker from a focused composer dismisses the keyboard; all model options remain accessible. The final keyboard and sheet screenshots were visually inspected.
+- Physical ARM64 hardware and an iOS build were not exercised.
+
 The remaining record below describes the original 1.0.0 release, not 1.1.0 verification.
 
 Built against committed WebMind source `2f69ba040c1c13b19b5599c8c4965b3ef9b5f00a`, matching GitHub HEAD when implementation began. Original frontend and backend files were not modified.

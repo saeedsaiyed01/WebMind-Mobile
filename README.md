@@ -4,7 +4,7 @@ A standalone Expo SDK 57 / React Native mobile app that shares WebMind accounts,
 
 ## Install
 
-Download the APK from [GitHub Releases](https://github.com/saeedsaiyed01/WebMind-Mobile/releases), then open it on an Android phone and allow installation from your file manager when Android prompts. It contains its JavaScript, fonts, and native libraries; Expo Go and Metro are not required. Internet access is required for backend features. Updates use the original signing key.
+Download [WebMind 1.1.0 for Android](https://github.com/saeedsaiyed01/WebMind-Mobile/releases/tag/v1.1.0), then open the APK on an Android phone and allow installation from your file manager when Android prompts. It contains its JavaScript, fonts, and native libraries; Expo Go and Metro are not required. Internet access is required for backend features. Updates use the original signing key. See [validation details](VALIDATION.md) for checks, artifact size, checksum, and remaining validation limits.
 
 Sign in using an existing WebMind email/password account, or create an account. The same account, memories, conversation history, model catalog, credits, and subscription are shared with the website.
 
