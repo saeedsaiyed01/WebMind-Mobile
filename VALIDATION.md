@@ -1,5 +1,20 @@
 # WebMind Mobile validation
 
+## Version 1.1.0
+
+- Mobile unit tests: 12 pass (streaming, errors, cancellation, auth expiry, stale conversation protection, native OAuth callbacks, saved appearance selection, and text contrast in both palettes).
+- Backend OAuth tests: 5 pass (signed state, verifier binding, expiration, replay protection, denial recovery, and existing website compatibility).
+- The OAuth backend change is deployed from WebMind commit `de7aa5ae8e1a029e61ee2cc043958c542db5cafb`; its mobile-start endpoint returned HTTP 200 with the expected origin and state/verifier sizes.
+- Lint and TypeScript passed after the UI and appearance refactor.
+- Production web export and deterministic UI interactions passed: email signup stays in the app; theme persistence and system changes; draft preservation; 360/390/430 px layouts; model and attachment sheets; retries retaining attachments; Markdown/code rendering; stopping a response; and conversation history. No browser runtime errors. Coverage lives in `tests/ui-regression.cjs`.
+- Expo Doctor: 21/21 passed with the native keyboard module installed.
+- The signed 1.1.0 APK was installed as an update on an Android 15 x86-64 emulator. Native checks passed for session restoration, the composer and send control above the visible keyboard, draft preservation across appearance changes, dark model selection, attachment search above the keyboard, and light appearance persistence after force-stop/relaunch. Screenshots were inspected; no native crashes were recorded.
+- The optimized build limits native ABIs to ARM64 and x86-64, enables R8 and resource shrinking, uses direct imports for three font weights and Feather icons, and removes the unused gradient module. JavaScript bundle compression stays disabled to retain memory-mapped Hermes startup.
+- The Markdown parser was upgraded to 14.3.2 through a scoped dependency override. The remaining npm advisories involve the SDK/build toolchain; no incompatible SDK downgrade was applied.
+- Real Google account consent and a purchase have not been exercised.
+
+The remaining record below describes the original 1.0.0 release, not 1.1.0 verification.
+
 Built against committed WebMind source `2f69ba040c1c13b19b5599c8c4965b3ef9b5f00a`, matching GitHub HEAD when implementation began. Original frontend and backend files were not modified.
 
 ## Automated checks

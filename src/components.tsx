@@ -7,7 +7,7 @@ import {
   ViewStyle,
   StyleProp,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -19,18 +19,21 @@ import Animated, {
   cancelAnimation,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import { colors as c } from "./theme";
+import { useAppTheme, useThemedStyles, type Palette } from "./theme";
 
 export type IconName = React.ComponentProps<typeof Feather>["name"];
 export const Icon = ({
   name,
   size = 20,
-  color = c.ink,
+  color,
 }: {
   name: IconName;
   size?: number;
   color?: string;
-}) => <Feather name={name} size={size} color={color} />;
+}) => {
+  const { colors } = useAppTheme();
+  return <Feather name={name} size={size} color={color ?? colors.ink} />;
+};
 export function Label({
   children,
   style,
@@ -38,6 +41,8 @@ export function Label({
   children: React.ReactNode;
   style?: any;
 }) {
+  const s = useSharedStyles();
+
   return <Text style={[s.label, style]}>{children}</Text>;
 }
 export function Heading({
@@ -47,6 +52,8 @@ export function Heading({
   children: React.ReactNode;
   style?: any;
 }) {
+  const s = useSharedStyles();
+
   return <Text style={[s.heading, style]}>{children}</Text>;
 }
 export function Body({
@@ -58,6 +65,8 @@ export function Body({
   style?: any;
   lines?: number;
 }) {
+  const s = useSharedStyles();
+
   return (
     <Text numberOfLines={lines} style={[s.body, style]}>
       {children}
@@ -123,7 +132,11 @@ export function Tap({
           Haptics.selectionAsync().catch(() => {});
           onPress?.();
         }}
-        style={{ opacity: disabled ? 0.45 : 1 }}
+        style={{
+          opacity: disabled ? 0.45 : 1,
+          minHeight: 44,
+          justifyContent: "center",
+        }}
       >
         {children}
       </Pressable>
@@ -141,15 +154,18 @@ export function RoundButton({
   label: string;
   dark?: boolean;
 }) {
+  const { colors: c } = useAppTheme();
+  const s = useSharedStyles();
+
   return (
     <Tap label={label} onPress={onPress}>
       <View
         style={[
           s.round,
-          dark && { backgroundColor: c.green, borderColor: c.green },
+          dark && { backgroundColor: c.accent, borderColor: c.accent },
         ]}
       >
-        <Icon name={name} color={dark ? "#FFF" : c.ink} />
+        <Icon name={name} color={dark ? c.onAccent : c.ink} />
       </View>
     </Tap>
   );
@@ -165,10 +181,13 @@ export function Empty({
   detail: string;
   action?: React.ReactNode;
 }) {
+  const { colors: c } = useAppTheme();
+  const s = useSharedStyles();
+
   return (
     <Enter style={s.empty}>
       <View style={s.emptyIcon}>
-        <Icon name={icon} size={28} color={c.green} />
+        <Icon name={icon} size={28} color={c.accent} />
       </View>
       <Heading style={{ fontSize: 22, textAlign: "center" }}>{title}</Heading>
       <Body style={{ textAlign: "center", maxWidth: 280 }}>{detail}</Body>
@@ -183,6 +202,8 @@ export function Orb({
   size?: number;
   active?: boolean;
 }) {
+  const { colors: c } = useAppTheme();
+
   const pulse = useSharedValue(0);
   const reduced = useReducedMotion();
   useEffect(() => {
@@ -207,7 +228,7 @@ export function Orb({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: c.sage,
+          backgroundColor: c.accentSoft,
           alignItems: "center",
           justifyContent: "center",
         },
@@ -220,7 +241,7 @@ export function Orb({
           width: size * 0.72,
           height: size * 0.72,
           borderRadius: size,
-          borderColor: "#9CB795",
+          borderColor: c.highlight,
           borderWidth: 1,
           transform: [{ rotate: "30deg" }, { scaleX: 0.5 }],
         }}
@@ -231,67 +252,70 @@ export function Orb({
           width: size * 0.72,
           height: size * 0.72,
           borderRadius: size,
-          borderColor: c.green,
+          borderColor: c.accent,
           borderWidth: 1,
           transform: [{ rotate: "-30deg" }, { scaleX: 0.5 }],
         }}
       />
-      <Icon name="star" size={size * 0.25} color={c.green} />
+      <Icon name="star" size={size * 0.25} color={c.accent} />
     </Animated.View>
   );
 }
-export const s = StyleSheet.create({
-  label: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 10,
-    letterSpacing: 1.8,
-    color: c.muted,
-    textTransform: "uppercase",
-  },
-  heading: {
-    fontFamily: "Manrope_600SemiBold",
-    fontSize: 30,
-    letterSpacing: -1.2,
-    color: c.ink,
-    lineHeight: 39,
-  },
-  body: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 14,
-    color: c.muted,
-    lineHeight: 22,
-  },
-  round: {
-    height: 44,
-    width: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: c.line,
-    backgroundColor: c.paper,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  empty: { paddingVertical: 44, gap: 12, alignItems: "center" },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 24,
-    backgroundColor: c.sage,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  between: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  card: {
-    borderRadius: 24,
-    backgroundColor: c.paper,
-    borderWidth: 1,
-    borderColor: c.line,
-    padding: 20,
-  },
-});
+const makeSharedStyles = (c: Palette) =>
+  StyleSheet.create({
+    label: {
+      fontFamily: "DMSans_500Medium",
+      fontSize: 12,
+      letterSpacing: 0.8,
+      color: c.muted,
+      textTransform: "uppercase",
+    },
+    heading: {
+      fontFamily: "Manrope_600SemiBold",
+      fontSize: 30,
+      letterSpacing: -1.2,
+      color: c.ink,
+      lineHeight: 39,
+    },
+    body: {
+      fontFamily: "DMSans_400Regular",
+      fontSize: 14,
+      color: c.muted,
+      lineHeight: 22,
+    },
+    round: {
+      height: 44,
+      width: 44,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: c.line,
+      backgroundColor: c.paper,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    empty: { paddingVertical: 44, gap: 12, alignItems: "center" },
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 20,
+      backgroundColor: c.accentSoft,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 6,
+    },
+    row: { flexDirection: "row", alignItems: "center", gap: 12 },
+    between: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    card: {
+      borderRadius: 24,
+      backgroundColor: c.paper,
+      borderWidth: 1,
+      borderColor: c.line,
+      padding: 20,
+    },
+  });
+
+export const useSharedStyles = () => useThemedStyles(makeSharedStyles);

@@ -1,6 +1,8 @@
 const { withAppBuildGradle } = require("expo/config-plugins");
-module.exports = (config) =>
-  withAppBuildGradle(config, (mod) => {
+module.exports = (config) => {
+  // EAS configures its own release signing; this plugin only supports local builds.
+  if (!process.env.WEBMIND_KEYSTORE_PATH) return config;
+  return withAppBuildGradle(config, (mod) => {
     if (mod.modResults.contents.includes("WEBMIND_KEYSTORE_PATH")) return mod;
     mod.modResults.contents = mod.modResults.contents.replace(
       "signingConfigs {",
@@ -20,3 +22,4 @@ module.exports = (config) =>
     );
     return mod;
   });
+};

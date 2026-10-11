@@ -5,9 +5,9 @@ import {
   ScrollView,
   StyleSheet,
   RefreshControl,
+  FlatList,
 } from "react-native";
 import { Button, Chip, Searchbar, ActivityIndicator } from "react-native-paper";
-import { LinearGradient } from "expo-linear-gradient";
 import { Memory, Conversation, User, Plan } from "./api";
 import {
   Body,
@@ -19,10 +19,10 @@ import {
   RoundButton,
   Enter,
   Empty,
-  s,
+  useSharedStyles,
   IconName,
 } from "./components";
-import { colors as c } from "./theme";
+import { useAppTheme, useThemedStyles, type Palette } from "./theme";
 
 const memoryIcons: Record<string, IconName> = {
   note: "edit-3",
@@ -31,12 +31,12 @@ const memoryIcons: Record<string, IconName> = {
   tweet: "twitter",
   video: "play-circle",
 };
-const memoryTints: Record<string, string> = {
-  note: "#EFEAD8",
-  website: "#E0EADD",
-  document: "#E5E8F0",
-  tweet: "#E8E3ED",
-};
+const memoryTints = (c: Palette): Record<string, string> => ({
+  note: c.highlight,
+  website: c.subtle,
+  document: c.accentSoft,
+  tweet: c.subtle,
+});
 export function MemoryRow({
   item,
   onPress,
@@ -46,6 +46,10 @@ export function MemoryRow({
   onPress: () => void;
   compact?: boolean;
 }) {
+  const { colors: c } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const s = useSharedStyles();
+
   return (
     <Tap label={`Open ${item.title || "untitled memory"}`} onPress={onPress}>
       <View style={[styles.memory, compact && { padding: 16 }]}>
@@ -53,20 +57,20 @@ export function MemoryRow({
           <View
             style={[
               styles.typeIcon,
-              { backgroundColor: memoryTints[item.type] || c.sage },
+              { backgroundColor: memoryTints(c)[item.type] || c.accentSoft },
             ]}
           >
             <Icon
               name={memoryIcons[item.type] || "bookmark"}
               size={18}
-              color={c.green}
+              color={c.accent}
             />
           </View>
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={styles.memoryTitle}>
               {item.title || "Untitled memory"}
             </Text>
-            <Body lines={1} style={{ fontSize: 11 }}>
+            <Body lines={1} style={{ fontSize: 12 }}>
               {item.type === "document"
                 ? "PDF document"
                 : item.type === "website"
@@ -88,7 +92,7 @@ export function MemoryRow({
         {!compact && (
           <Body
             lines={3}
-            style={{ marginTop: 14, fontSize: 13, color: "#747B70" }}
+            style={{ marginTop: 14, fontSize: 13, color: c.muted }}
           >
             {item.type === "document"
               ? item.extractedText?.slice(0, 200) ||
@@ -132,6 +136,10 @@ export function Workspace({
   library: () => void;
   account: () => void;
 }) {
+  const { colors: c } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const s = useSharedStyles();
+
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -145,7 +153,7 @@ export function Workspace({
         <RefreshControl
           refreshing={refreshing}
           onRefresh={refresh}
-          tintColor={c.green}
+          tintColor={c.accent}
         />
       }
     >
@@ -153,12 +161,14 @@ export function Workspace({
         <View style={s.row}>
           <Orb size={34} active={false} />
           <Text style={styles.wordmark}>
-            webmind<Text style={{ color: c.orange }}>.</Text>
+            webmind<Text style={{ color: c.secondary }}>.</Text>
           </Text>
         </View>
         <Tap label="Open account" onPress={account}>
           <View style={styles.avatar}>
-            <Text style={{ color: c.green, fontFamily: "Manrope_600SemiBold" }}>
+            <Text
+              style={{ color: c.accent, fontFamily: "Manrope_600SemiBold" }}
+            >
               {name.slice(0, 1).toUpperCase()}
             </Text>
           </View>
@@ -168,16 +178,16 @@ export function Workspace({
         <Label>
           {greeting}, {name}
         </Label>
-        <Heading style={{ fontSize: 34, lineHeight: 44, marginTop: 9 }}>
-          {"A clearer mind.\nA brighter next step."}
+        <Heading style={{ fontSize: 28, lineHeight: 36, marginTop: 8 }}>
+          Your workspace
         </Heading>
         <Body style={{ marginTop: 8 }}>
-          Your ideas have a home. Let’s see where they lead.
+          Everything you saved. Ready to put to work.
         </Body>
       </Enter>
       <Enter delay={120}>
         <Tap label="Start a conversation" onPress={() => startChat()}>
-          <LinearGradient colors={["#354B3B", "#253B2D"]} style={styles.hero}>
+          <View style={styles.hero}>
             <View
               style={{
                 position: "absolute",
@@ -189,19 +199,21 @@ export function Workspace({
               <Orb size={135} />
             </View>
             <View style={{ maxWidth: "73%", gap: 14 }}>
-              <Label style={{ color: "#B9C8AE", fontSize: 9 }}>
-                A THOUGHTFUL LITTLE ASSISTANT
+              <Label style={{ color: c.onAccent, fontSize: 12 }}>
+                BUILT AROUND YOUR KNOWLEDGE
               </Label>
-              <Heading style={{ color: "#FFF", fontSize: 25, lineHeight: 33 }}>
-                {"Big questions.\nFresh perspectives."}
+              <Heading
+                style={{ color: c.onAccent, fontSize: 25, lineHeight: 33 }}
+              >
+                {"Your next idea\nstarts here."}
               </Heading>
-              <Body style={{ color: "#C1CCB9", fontSize: 12 }}>
+              <Body style={{ color: c.onAccent, fontSize: 14 }}>
                 Ask, explore, and connect what you know.
               </Body>
               <View style={[s.row, { marginTop: 7 }]}>
                 <View
                   style={{
-                    backgroundColor: c.lime,
+                    backgroundColor: c.highlight,
                     paddingHorizontal: 15,
                     paddingVertical: 10,
                     borderRadius: 12,
@@ -209,26 +221,26 @@ export function Workspace({
                 >
                   <Text
                     style={{
-                      color: c.green,
+                      color: c.accent,
                       fontSize: 12,
                       fontFamily: "DMSans_500Medium",
                     }}
                   >
-                    Let’s think together ↗
+                    Start a chat ↗
                   </Text>
                 </View>
               </View>
             </View>
-          </LinearGradient>
+          </View>
         </Tap>
       </Enter>
       <Enter delay={180} style={{ flexDirection: "row", gap: 12 }}>
         <View style={[styles.stat, { flex: 1 }]}>
-          <Icon name="layers" size={18} color={c.green} />
+          <Icon name="layers" size={18} color={c.accent} />
           <Text style={styles.statValue}>
             {memories.length.toString().padStart(2, "0")}
           </Text>
-          <Label style={{ fontSize: 9, letterSpacing: 1 }}>
+          <Label style={{ fontSize: 12, letterSpacing: 1 }}>
             SAVED MEMORIES
           </Label>
         </View>
@@ -238,18 +250,18 @@ export function Workspace({
           style={{ flex: 1 }}
         >
           <View style={styles.stat}>
-            <Icon name="zap" size={18} color={c.orange} />
+            <Icon name="zap" size={18} color={c.secondary} />
             <Text style={styles.statValue}>
               {plan?.credits ?? user.credits}
             </Text>
-            <Label style={{ fontSize: 9, letterSpacing: 1 }}>
-              IDEAS LEFT TO EXPLORE
+            <Label style={{ fontSize: 12, letterSpacing: 1 }}>
+              AVAILABLE CREDITS
             </Label>
           </View>
         </Tap>
       </Enter>
       {!!error && (
-        <View style={[s.card, { backgroundColor: "#FAEEEA" }]}>
+        <View style={[s.card, { backgroundColor: c.dangerSoft }]}>
           <Body style={{ color: c.danger }}>{error}</Body>
           <Button onPress={refresh}>Retry</Button>
         </View>
@@ -257,9 +269,9 @@ export function Workspace({
       <Enter delay={220}>
         <View style={[s.between, { marginBottom: 16 }]}>
           <View>
-            <Label>COLLECTED ALONG THE WAY</Label>
+            <Label>RECENTLY SAVED</Label>
             <Heading style={{ fontSize: 23, lineHeight: 32, marginTop: 3 }}>
-              Your recent memories
+              Recent memories
             </Heading>
           </View>
           <RoundButton name="plus" label="Add a memory" onPress={add} dark />
@@ -278,9 +290,9 @@ export function Workspace({
             ))}
             <Tap label="View all memories" onPress={library}>
               <Body
-                style={{ color: c.green, textAlign: "center", padding: 12 }}
+                style={{ color: c.accent, textAlign: "center", padding: 12 }}
               >
-                A little more to explore →
+                View all memories →
               </Body>
             </Tap>
           </View>
@@ -290,13 +302,13 @@ export function Workspace({
               s.card,
               {
                 borderStyle: "dashed",
-                backgroundColor: "#F0F2E9",
+                backgroundColor: c.subtle,
                 alignItems: "center",
                 gap: 12,
               },
             ]}
           >
-            <Icon name="bookmark" color={c.green} size={25} />
+            <Icon name="bookmark" color={c.accent} size={25} />
             <Heading style={{ fontSize: 20, lineHeight: 27 }}>
               Every idea starts somewhere.
             </Heading>
@@ -311,7 +323,7 @@ export function Workspace({
       </Enter>
       {!!conversations.length && (
         <Enter delay={260}>
-          <Label style={{ marginBottom: 14 }}>PICK UP A THOUGHT</Label>
+          <Label style={{ marginBottom: 14 }}>RECENT CONVERSATIONS</Label>
           {conversations.slice(0, 2).map((conv) => (
             <Tap
               key={conv._id}
@@ -328,7 +340,7 @@ export function Workspace({
                   alignItems: "center",
                 }}
               >
-                <Icon name="message-circle" size={18} color={c.green} />
+                <Icon name="message-circle" size={18} color={c.accent} />
                 <Body lines={1} style={{ flex: 1, color: c.ink }}>
                   {conv.title}
                 </Body>
@@ -338,8 +350,8 @@ export function Workspace({
           ))}
         </Enter>
       )}
-      <Body style={{ textAlign: "center", fontSize: 10, paddingTop: 4 }}>
-        A calm place for a curious mind.
+      <Body style={{ textAlign: "center", fontSize: 12, paddingTop: 4 }}>
+        Your knowledge. Always within reach.
       </Body>
     </ScrollView>
   );
@@ -361,6 +373,9 @@ export function Library({
   openMemory: (m: Memory) => void;
   add: () => void;
 }) {
+  const { colors: c } = useAppTheme();
+  const s = useSharedStyles();
+
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const filtered = memories.filter(
@@ -375,17 +390,17 @@ export function Library({
       <View style={{ padding: 24, paddingBottom: 14, gap: 16 }}>
         <View style={s.between}>
           <View>
-            <Label>YOUR PERSONAL CONSTELLATION</Label>
-            <Heading style={{ marginTop: 6 }}>The memory library.</Heading>
+            <Label>YOUR KNOWLEDGE</Label>
+            <Heading style={{ marginTop: 6 }}>Library</Heading>
           </View>
           <RoundButton name="plus" label="Add memory" onPress={add} dark />
         </View>
         <Searchbar
-          placeholder="Find a thought, link, or document"
+          placeholder="Search notes, links, and documents"
           accessibilityLabel="Search memories"
           value={query}
           onChangeText={setQuery}
-          style={{ backgroundColor: "#EEF0E8", borderRadius: 16 }}
+          style={{ backgroundColor: c.subtle, borderRadius: 16 }}
           inputStyle={{
             fontSize: 13,
             fontFamily: "DMSans_400Regular",
@@ -411,7 +426,7 @@ export function Library({
             selected={filter === id}
             onPress={() => setFilter(id)}
             style={{
-              backgroundColor: filter === id ? c.sage : c.paper,
+              backgroundColor: filter === id ? c.accentSoft : c.paper,
               borderWidth: 1,
               borderColor: c.line,
             }}
@@ -420,106 +435,113 @@ export function Library({
           </Chip>
         ))}
       </ScrollView>
-      <ScrollView
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            tintColor={c.green}
-          />
-        }
+      <FlatList
+        data={loading ? [] : filtered}
+        keyExtractor={(item) => item._id}
+        renderItem={({ item }) => (
+          <MemoryRow item={item} onPress={() => openMemory(item)} />
+        )}
+        refreshing={refreshing}
+        onRefresh={refresh}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={10}
+        windowSize={7}
         contentContainerStyle={{ padding: 24, paddingTop: 0, gap: 12 }}
-      >
-        <Label style={{ marginBottom: 4 }}>
-          {filtered.length} {filtered.length === 1 ? "MEMORY" : "MEMORIES"} ·
-          ALWAYS WITH YOU
-        </Label>
-        {!!error && (
-          <View style={s.card}>
-            <Body style={{ color: c.danger }}>{error}</Body>
-            <Button onPress={refresh}>Retry</Button>
-          </View>
-        )}
-        {loading ? (
-          <ActivityIndicator style={{ margin: 40 }} />
-        ) : filtered.length ? (
-          filtered.map((item) => (
-            <MemoryRow
-              key={item._id}
-              item={item}
-              onPress={() => openMemory(item)}
+        ListHeaderComponent={
+          <>
+            <Label style={{ marginBottom: 4 }}>
+              {filtered.length} {filtered.length === 1 ? "MEMORY" : "MEMORIES"}{" "}
+              · ALWAYS WITH YOU
+            </Label>
+            {!!error && (
+              <View style={s.card}>
+                <Body style={{ color: c.danger }}>{error}</Body>
+                <Button onPress={refresh}>Retry</Button>
+              </View>
+            )}
+          </>
+        }
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator style={{ margin: 40 }} />
+          ) : (
+            <Empty
+              icon="bookmark"
+              title={
+                query || filter !== "all"
+                  ? "No memories found."
+                  : "A blank page. A fresh start."
+              }
+              detail={
+                query
+                  ? "Try another word, or explore a different collection."
+                  : "Collect the things that move you. WebMind will help you connect them."
+              }
+              action={<Button onPress={add}>Save a memory</Button>}
             />
-          ))
-        ) : (
-          <Empty
-            icon="bookmark"
-            title={
-              query || filter !== "all"
-                ? "No memories found."
-                : "A blank page. A fresh start."
-            }
-            detail={
-              query
-                ? "Try another word, or explore a different collection."
-                : "Collect the things that move you. WebMind will help you connect them."
-            }
-            action={<Button onPress={add}>Save a memory</Button>}
-          />
-        )}
-      </ScrollView>
+          )
+        }
+      />
     </View>
   );
 }
-const styles = StyleSheet.create({
-  page: { padding: 24, gap: 26, paddingBottom: 30 },
-  wordmark: {
-    fontFamily: "Manrope_600SemiBold",
-    fontSize: 22,
-    letterSpacing: -1,
-  },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: c.sage,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "#FFF",
-  },
-  hero: { padding: 24, borderRadius: 26, overflow: "hidden", minHeight: 233 },
-  stat: {
-    borderRadius: 22,
-    borderColor: c.line,
-    borderWidth: 1,
-    backgroundColor: c.paper,
-    padding: 18,
-    gap: 8,
-  },
-  statValue: {
-    fontFamily: "Manrope_600SemiBold",
-    fontSize: 29,
-    color: c.ink,
-    letterSpacing: -1,
-  },
-  memory: {
-    padding: 20,
-    backgroundColor: c.paper,
-    borderWidth: 1,
-    borderColor: c.line,
-    borderRadius: 22,
-  },
-  typeIcon: {
-    height: 42,
-    width: 42,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  memoryTitle: {
-    fontFamily: "Manrope_600SemiBold",
-    color: c.ink,
-    fontSize: 14,
-    marginBottom: 3,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    page: { padding: 24, gap: 26, paddingBottom: 30 },
+    wordmark: {
+      fontFamily: "Manrope_600SemiBold",
+      fontSize: 22,
+      letterSpacing: -1,
+    },
+    avatar: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: c.accentSoft,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 3,
+      borderColor: c.paper,
+    },
+    hero: {
+      padding: 24,
+      borderRadius: 24,
+      overflow: "hidden",
+      minHeight: 232,
+      backgroundColor: c.ink,
+    },
+    stat: {
+      borderRadius: 22,
+      borderColor: c.line,
+      borderWidth: 1,
+      backgroundColor: c.paper,
+      padding: 18,
+      gap: 8,
+    },
+    statValue: {
+      fontFamily: "Manrope_600SemiBold",
+      fontSize: 29,
+      color: c.ink,
+      letterSpacing: -1,
+    },
+    memory: {
+      padding: 20,
+      backgroundColor: c.paper,
+      borderWidth: 1,
+      borderColor: c.line,
+      borderRadius: 22,
+    },
+    typeIcon: {
+      height: 42,
+      width: 42,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    memoryTitle: {
+      fontFamily: "Manrope_600SemiBold",
+      color: c.ink,
+      fontSize: 14,
+      marginBottom: 3,
+    },
+  });

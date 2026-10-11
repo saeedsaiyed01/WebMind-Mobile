@@ -15,8 +15,9 @@ import BottomSheet, {
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import { Memory, request } from "./api";
-import { Body, Heading, Label, Icon, Tap, s } from "./components";
-import { colors as c } from "./theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Body, Heading, Label, Icon, Tap, useSharedStyles } from "./components";
+import { useAppTheme, useThemedStyles, type Palette } from "./theme";
 
 const SheetInput =
   Platform.OS === "web" ? NativeTextInput : BottomSheetTextInput;
@@ -37,6 +38,11 @@ export function MemorySheet({
   onChat: (item: Memory) => void;
   notify: (msg: string) => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const { colors: c } = useAppTheme();
+  const s = useSharedStyles();
+  const input = useThemedStyles(makeInput);
+
   const sheet = useRef<BottomSheet>(null);
   const points = useMemo(() => ["88%"], []);
   const [edit, setEdit] = useState(editing);
@@ -173,9 +179,11 @@ export function MemorySheet({
       backdropComponent={backdrop}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
+      enableBlurKeyboardOnGesture
+      topInset={insets.top}
       android_keyboardInputMode="adjustResize"
       backgroundStyle={{ backgroundColor: c.bg, borderRadius: 30 }}
-      handleIndicatorStyle={{ backgroundColor: "#CED4C9", width: 34 }}
+      handleIndicatorStyle={{ backgroundColor: c.line, width: 34 }}
     >
       <BottomSheetScrollView
         keyboardShouldPersistTaps="handled"
@@ -217,7 +225,9 @@ export function MemorySheet({
                       setType(id);
                       setError("");
                     }}
-                    style={{ backgroundColor: type === id ? c.sage : c.paper }}
+                    style={{
+                      backgroundColor: type === id ? c.accentSoft : c.paper,
+                    }}
                   >
                     {name}
                   </Chip>
@@ -253,7 +263,7 @@ export function MemorySheet({
                       },
                     ]}
                   >
-                    <Icon name="upload-cloud" size={32} color={c.green} />
+                    <Icon name="upload-cloud" size={32} color={c.accent} />
                     <Body style={{ color: c.ink }}>
                       {file?.name || "Choose a PDF"}
                     </Body>
@@ -311,7 +321,7 @@ export function MemorySheet({
         ) : (
           <>
             <View style={s.row}>
-              <Chip style={{ backgroundColor: c.sage }}>
+              <Chip style={{ backgroundColor: c.accentSoft }}>
                 {type === "document" ? "PDF document" : type}
               </Chip>
               <Body style={{ fontSize: 12 }}>
@@ -405,7 +415,7 @@ export function MemorySheet({
     </BottomSheet>
   );
 }
-const input = {
+const makeInput = (c: Palette) => ({
   backgroundColor: c.paper,
   borderWidth: 1,
   borderColor: c.line,
@@ -414,4 +424,4 @@ const input = {
   fontSize: 15,
   fontFamily: "DMSans_400Regular",
   color: c.ink,
-};
+});

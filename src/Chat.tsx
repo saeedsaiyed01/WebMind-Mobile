@@ -1,58 +1,51 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
   TextInput,
+  FlatList,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  Share,
 } from "react-native";
-import { Button, Chip, ActivityIndicator } from "react-native-paper";
-import Markdown from "react-native-markdown-display";
-import { Memory, Model, chat, request, ApiError } from "./api";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Button, Chip } from "react-native-paper";
+import { type Model } from "./api";
 import {
   Body,
   Heading,
-  Label,
   Orb,
   Icon,
   Tap,
   RoundButton,
-  Enter,
-  s,
+  useSharedStyles,
 } from "./components";
-import { colors as c } from "./theme";
+import { useAppTheme, useThemedStyles, type Palette } from "./theme";
+import { useChat } from "./chat/useChat";
+import { ChatMessage } from "./chat/ChatMessage";
+import type { ChatSession, Message } from "./chat/session";
+export type { ChatSession } from "./chat/session";
 
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  failed?: boolean;
-}
-export interface ChatSession {
-  id?: string;
-  historyRequest?: number;
-  messages: Message[];
-  attachments: Memory[];
-}
-function createMessageId() {
-  return Date.now().toString();
-}
-export function ChatScreen({
-  session,
-  setSession,
-  model,
-  onModels,
-  onAttachments,
-  onHistory,
-  onNew,
-  notify,
-  onComplete,
-  onUpgrade,
-  onBusy,
-}: {
+const suggestions = [
+  {
+    icon: "layers" as const,
+    title: "Connect my memories",
+    prompt: "Find connections in my saved memories",
+  },
+  {
+    icon: "compass" as const,
+    title: "Build a plan",
+    prompt: "Help me turn an idea into a plan",
+  },
+  {
+    icon: "file-text" as const,
+    title: "Summarize a document",
+    prompt: "Summarize the key ideas in my documents",
+  },
+];
+
+export function ChatScreen(props: {
   session: ChatSession;
   setSession: React.Dispatch<React.SetStateAction<ChatSession>>;
   model: Model;
@@ -65,327 +58,189 @@ export function ChatScreen({
   onUpgrade: () => void;
   onBusy: (busy: boolean) => void;
 }) {
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [phase, setPhase] = useState("working");
-  const [error, setError] = useState("");
-  const [upgrade, setUpgrade] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const abort = useRef<AbortController | null>(null);
-  const scroll = useRef<ScrollView>(null);
-  useEffect(() => () => abort.current?.abort(), []);
-  useEffect(() => {
-    let alive = true;
-    if (!session.id || session.messages.length) {
-      Promise.resolve().then(() => {
-        if (alive) setLoadingHistory(false);
-      });
-      return () => {
-        alive = false;
-      };
-    }
-    const controller = new AbortController();
-    Promise.resolve().then(() => {
-      if (alive) {
-        setLoadingHistory(true);
-        setError("");
-      }
-    });
-    request<any[]>(
-      "/conversation/" + session.id,
-      "GET",
-      undefined,
-      controller.signal,
-    )
-      .then((rows) => {
-        if (alive) {
-          setLoadingHistory(false);
-          setSession((prev) => ({
-            ...prev,
-            messages: rows.flatMap((row) => [
-              { id: row._id + "-u", role: "user" as const, text: row.message },
-              {
-                id: row._id + "-a",
-                role: "assistant" as const,
-                text: row.response,
-              },
-            ]),
-          }));
-        }
-      })
-      .catch((e) => {
-        if (alive) setError(e.message);
-      })
-      .finally(() => {
-        if (alive) setLoadingHistory(false);
-      });
-    return () => {
-      alive = false;
-      controller.abort();
-    };
-  }, [session.id, session.historyRequest, session.messages.length, setSession]);
-  async function send(text = input.trim(), retryId?: string) {
-    if (!text || busy || loadingHistory) return;
-    const id = retryId || createMessageId();
-    const attachments = session.attachments;
-    setError("");
-    setUpgrade(false);
-    setInput("");
-    setBusy(true);
-    onBusy(true);
-    setPhase("working");
-    setSession((prev) => ({
-      ...prev,
-      messages: retryId
-        ? prev.messages.map((m) => (m.id === id ? { ...m, failed: false } : m))
-        : [...prev.messages, { id, role: "user", text }],
-      attachments: [],
-    }));
-    const controller = new AbortController();
-    abort.current = controller;
-    try {
-      const result = await chat(
-        {
-          message: text,
-          conversationId: session.id,
-          model: model.id,
-          attachedDocumentIds: attachments.map((item) => item._id),
-        },
-        setPhase,
-        controller.signal,
-      );
-      setSession((prev) => ({
-        ...prev,
-        id: result.conversationId,
-        messages: [
-          ...prev.messages,
-          { id: id + "-answer", role: "assistant", text: result.answer },
-        ],
-      }));
-      onComplete(result.remainingCredits);
-    } catch (e) {
-      setError((e as Error).message);
-      setUpgrade(e instanceof ApiError && e.needsUpgrade);
-      setSession((prev) => ({
-        ...prev,
-        attachments,
-        messages: prev.messages.map((m) =>
-          m.id === id ? { ...m, failed: true } : m,
-        ),
-      }));
-    } finally {
-      setBusy(false);
-      onBusy(false);
-      abort.current = null;
-    }
-  }
-  function fresh() {
-    if (busy) {
-      notify("Finish or stop the current answer first.");
-      return;
-    }
-    setError("");
-    setInput("");
-    onNew();
-  }
+  const insets = useSafeAreaInsets();
+  const { colors: c } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const s = useSharedStyles();
+
+  const {
+    session,
+    setSession,
+    model,
+    onModels,
+    onAttachments,
+    onHistory,
+    onNew,
+    notify,
+    onUpgrade,
+  } = props;
+  const {
+    input,
+    setInput,
+    busy,
+    phase,
+    error,
+    upgrade,
+    loadingHistory,
+    historyFailed,
+    send,
+    stop,
+    retryHistory,
+  } = useChat(props);
+  const feed = useRef<FlatList<Message>>(null);
+  const inputRef = useRef<TextInput>(null);
+  const nearBottom = useRef(true);
+  const [showLatest, setShowLatest] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const jumpToLatest = () => {
+    nearBottom.current = true;
+    setShowLatest(false);
+    feed.current?.scrollToEnd({ animated: true });
+  };
+  const guard = (action: () => void) =>
+    busy ? notify("Stop the current response first.") : action();
+
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={styles.screen}
+      behavior="padding"
+      enabled={Platform.OS !== "web"}
+      keyboardVerticalOffset={insets.top}
     >
       <View style={styles.header}>
-        <View>
-          <Label>YOUR THINKING PARTNER</Label>
-          <Heading style={{ fontSize: 25, lineHeight: 34 }}>
-            A little clarity.
-          </Heading>
-        </View>
-        <View style={s.row}>
-          <RoundButton
-            name="clock"
-            label="Conversation history"
-            onPress={() =>
-              busy
-                ? notify("Finish or stop the current answer first.")
-                : onHistory()
-            }
-          />
-          <RoundButton name="plus" label="New conversation" onPress={fresh} />
-        </View>
-      </View>
-      <Tap
-        label="Select AI model"
-        onPress={onModels}
-        style={{ alignSelf: "flex-start", marginLeft: 24, marginBottom: 10 }}
-      >
-        <View style={styles.model}>
-          <View style={styles.online} />
-          <Body style={{ fontSize: 12, color: c.green }}>
-            {model.name.replace(/ \(.*\)/, "")}
+        <RoundButton
+          name="sidebar"
+          label="Conversation history"
+          onPress={() => guard(onHistory)}
+        />
+        <View style={styles.headerTitle}>
+          <Text style={styles.title}>WebMind</Text>
+          <Body style={styles.subtitle}>
+            {session.id ? "Conversation" : "New conversation"}
           </Body>
-          <Icon name="chevron-down" size={14} color={c.green} />
         </View>
-      </Tap>
-      <ScrollView
-        ref={scroll}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.feed}
-        onContentSizeChange={() =>
-          scroll.current?.scrollToEnd({ animated: true })
-        }
-      >
-        {loadingHistory ? (
-          <ActivityIndicator style={{ margin: 30 }} />
-        ) : !session.messages.length ? (
-          <Enter style={styles.welcome}>
-            <Orb size={90} />
-            <Label style={{ marginTop: 14 }}>CONNECT THE DOTS</Label>
-            <Heading style={{ textAlign: "center", fontSize: 28 }}>
-              What’s on your mind?
-            </Heading>
-            <Body style={{ textAlign: "center", maxWidth: 270 }}>
-              {
-                "An idea, a question, a half-formed thought.\nLet’s make something of it."
-              }
-            </Body>
-            <View style={{ width: "100%", gap: 10, marginTop: 24 }}>
-              {[
-                "Find connections in my saved memories",
-                "Help me turn an idea into a plan",
-                "Summarize the key ideas in my documents",
-              ].map((prompt, i) => (
-                <Tap
-                  key={prompt}
-                  label={prompt}
-                  onPress={() => setInput(prompt)}
-                >
-                  <View style={styles.prompt}>
-                    <Icon
-                      name={
-                        (["git-branch", "compass", "file-text"] as const)[i]
-                      }
-                      color={c.green}
-                      size={18}
-                    />
-                    <Body style={{ flex: 1, color: c.ink, fontSize: 13 }}>
-                      {prompt}
-                    </Body>
-                    <Icon name="arrow-up-right" size={16} color={c.muted} />
-                  </View>
-                </Tap>
-              ))}
-            </View>
-          </Enter>
-        ) : (
-          session.messages.map((m) => (
-            <Enter
-              key={m.id}
-              style={[
-                styles.message,
-                m.role === "user" ? styles.userMessage : styles.aiMessage,
-              ]}
-            >
-              {m.role === "assistant" && (
-                <View style={[s.row, { marginBottom: 10 }]}>
-                  <Orb size={25} active={false} />
-                  <Label style={{ color: c.green, letterSpacing: 1 }}>
-                    WEBMIND
-                  </Label>
+        <RoundButton
+          name="edit"
+          label="New conversation"
+          onPress={() => guard(onNew)}
+        />
+      </View>
+      <View style={styles.feedWrap}>
+        <FlatList
+          ref={feed}
+          data={session.messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <ChatMessage
+              message={item}
+              busy={busy}
+              retry={() => send(item.text, item)}
+              notify={notify}
+            />
+          )}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={styles.feed}
+          initialNumToRender={12}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          onScroll={({
+            nativeEvent: { layoutMeasurement, contentOffset, contentSize },
+          }) => {
+            nearBottom.current =
+              contentSize.height - layoutMeasurement.height - contentOffset.y <
+              100;
+            setShowLatest(!nearBottom.current);
+          }}
+          scrollEventThrottle={100}
+          onContentSizeChange={() => {
+            if (nearBottom.current)
+              feed.current?.scrollToEnd({ animated: false });
+          }}
+          ListEmptyComponent={
+            loadingHistory ? (
+              <ActivityIndicator style={{ margin: 32 }} />
+            ) : session.id ? null : (
+              <View style={styles.welcome}>
+                <Orb size={56} active={false} />
+                <Heading style={styles.welcomeTitle}>
+                  What can we work on?
+                </Heading>
+                <Body style={styles.welcomeBody}>
+                  Turn your saved knowledge into your next idea.
+                </Body>
+                <View style={styles.suggestions}>
+                  {suggestions.map((item) => (
+                    <Tap
+                      key={item.title}
+                      label={item.prompt}
+                      onPress={() => {
+                        setInput(item.prompt);
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      <View style={styles.suggestion}>
+                        <View style={styles.suggestionIcon}>
+                          <Icon name={item.icon} size={20} color={c.accent} />
+                        </View>
+                        <Body style={{ flex: 1, color: c.ink }}>
+                          {item.title}
+                        </Body>
+                        <Icon name="arrow-up-right" size={16} color={c.muted} />
+                      </View>
+                    </Tap>
+                  ))}
+                </View>
+              </View>
+            )
+          }
+          ListFooterComponent={
+            <>
+              {busy && (
+                <View accessibilityLiveRegion="polite" style={styles.progress}>
+                  <Orb size={28} />
+                  <Body>
+                    {phase === "searching"
+                      ? "Searching your memories…"
+                      : phase === "solving"
+                        ? "Writing your response…"
+                        : "Thinking…"}
+                  </Body>
                 </View>
               )}
-              {m.role === "assistant" ? (
-                <Markdown style={markdown}>{m.text}</Markdown>
-              ) : (
-                <Text selectable style={styles.userText}>
-                  {m.text}
-                </Text>
+              {!!error && (
+                <View accessibilityLiveRegion="polite" style={styles.error}>
+                  <Body style={{ color: c.danger }}>{error}</Body>
+                  {upgrade && <Button onPress={onUpgrade}>View plans</Button>}
+                  {historyFailed && (
+                    <Button onPress={retryHistory}>Retry loading</Button>
+                  )}
+                </View>
               )}
-              {m.failed && (
-                <Button
-                  compact
-                  textColor={c.danger}
-                  disabled={busy}
-                  onPress={() => send(m.text, m.id)}
-                >
-                  Retry message
-                </Button>
-              )}
-              {m.role === "assistant" && (
-                <Tap
-                  label="Share answer"
-                  onPress={() => {
-                    Share.share({ message: m.text }).catch(() =>
-                      notify("Sharing is unavailable."),
-                    );
-                  }}
-                >
-                  <View style={{ paddingTop: 10, alignSelf: "flex-end" }}>
-                    <Icon name="share-2" size={15} color={c.muted} />
-                  </View>
-                </Tap>
-              )}
-            </Enter>
-          ))
-        )}
-        {busy && (
-          <Enter
-            style={[
-              styles.aiMessage,
-              { flexDirection: "row", alignItems: "center", gap: 14 },
-            ]}
-          >
-            <Orb size={38} />
-            <View style={{ flex: 1 }}>
-              <Body style={{ color: c.green, fontFamily: "DMSans_500Medium" }}>
-                {phase === "searching"
-                  ? "Connecting your memories…"
-                  : phase === "solving"
-                    ? "Making sense of it all…"
-                    : "Taking in your thought…"}
-              </Body>
-              <Body style={{ fontSize: 11 }}>
-                A little space for a thoughtful answer.
-              </Body>
-            </View>
-          </Enter>
-        )}
-        {!!error && (
-          <View
-            accessibilityLiveRegion="polite"
-            style={{
-              padding: 14,
-              backgroundColor: "#F8EDE9",
-              borderRadius: 16,
-            }}
-          >
-            <Body style={{ color: c.danger }}>{error}</Body>
-            {upgrade && <Button onPress={onUpgrade}>Explore plans</Button>}
-            {!session.messages.length && session.id && (
-              <Button
-                onPress={() => {
-                  setSession((prev) => ({
-                    ...prev,
-                    historyRequest: (prev.historyRequest || 0) + 1,
-                  }));
-                }}
-              >
-                Retry loading
-              </Button>
-            )}
+            </>
+          }
+        />
+        {showLatest && (
+          <View style={styles.latest}>
+            <RoundButton
+              name="arrow-down"
+              label="Jump to latest message"
+              onPress={jumpToLatest}
+            />
           </View>
         )}
-      </ScrollView>
-      <View style={styles.composer}>
+      </View>
+      <View style={[styles.composer, focused && styles.composerFocused]}>
         {!!session.attachments.length && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6, paddingBottom: 10 }}
+            contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
           >
             {session.attachments.map((item) => (
               <Chip
                 key={item._id}
-                compact
+                icon="file-document-outline"
                 onClose={() =>
                   setSession((prev) => ({
                     ...prev,
@@ -394,7 +249,8 @@ export function ChatScreen({
                     ),
                   }))
                 }
-                style={{ backgroundColor: c.sage }}
+                style={{ backgroundColor: c.accentSoft }}
+                textStyle={{ maxWidth: 180 }}
               >
                 {item.title || "Untitled"}
               </Chip>
@@ -402,169 +258,178 @@ export function ChatScreen({
           </ScrollView>
         )}
         <TextInput
+          ref={inputRef}
           accessibilityLabel="Message WebMind"
-          placeholder="Let a thought land here…"
+          placeholder="Ask anything, or @ a memory"
           placeholderTextColor={c.muted}
           value={input}
           onChangeText={(value) => {
             setInput(value);
-            if (value.endsWith("@")) onAttachments();
+            if (value.endsWith("@") && !busy) onAttachments();
           }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           multiline
           maxLength={10000}
           style={styles.textarea}
-          editable={!loadingHistory}
+          editable={!loadingHistory && !historyFailed}
         />
         <View style={s.between}>
-          <Tap label="Attach saved memories" onPress={onAttachments}>
-            <View style={[s.row, { padding: 8 }]}>
-              <Icon name="paperclip" size={19} color={c.green} />
-              <Body style={{ fontSize: 11 }}>Your memories</Body>
-            </View>
-          </Tap>
-          {busy ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
             <RoundButton
-              name="square"
-              label="Stop generating"
-              onPress={() => abort.current?.abort()}
+              name="plus"
+              label="Attach saved memories"
+              onPress={onAttachments}
             />
-          ) : (
             <Tap
-              label="Send message"
-              disabled={!input.trim() || loadingHistory}
-              onPress={() => send()}
+              label="Select AI model"
+              onPress={() => guard(onModels)}
+              style={{ flexShrink: 1 }}
             >
-              <View style={styles.send}>
-                <Icon name="arrow-up" color="#FFF" size={22} />
+              <View style={styles.model}>
+                <Body lines={1} style={styles.modelName}>
+                  {model.name.replace(/ \(.*\)/, "")}
+                </Body>
+                <Icon name="chevron-down" size={14} color={c.muted} />
               </View>
             </Tap>
-          )}
+          </View>
+          <Tap
+            label={busy ? "Stop generating" : "Send message"}
+            disabled={
+              !busy && (!input.trim() || loadingHistory || historyFailed)
+            }
+            onPress={
+              busy
+                ? stop
+                : () => {
+                    nearBottom.current = true;
+                    send(input);
+                  }
+            }
+          >
+            <View style={styles.send}>
+              <Icon
+                name={busy ? "square" : "arrow-up"}
+                color={c.onAccent}
+                size={20}
+              />
+            </View>
+          </Tap>
         </View>
       </View>
-      <Body
-        style={{
-          textAlign: "center",
-          fontSize: 9,
-          lineHeight: 17,
-          marginBottom: 4,
-        }}
-      >
-        A thoughtful assistant. Always give important answers a second look.
+      <Body style={styles.footnote}>
+        AI can make mistakes. Check important details.
       </Body>
     </KeyboardAvoidingView>
   );
 }
-const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  model: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: "#E9EEE4",
-  },
-  online: { width: 5, height: 5, borderRadius: 3, backgroundColor: c.green },
-  feed: { padding: 24, paddingTop: 12, gap: 18, flexGrow: 1 },
-  welcome: { alignItems: "center", gap: 10, paddingTop: 25, paddingBottom: 18 },
-  prompt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 16,
-    backgroundColor: c.paper,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: c.line,
-  },
-  message: { maxWidth: "100%" },
-  userMessage: {
-    padding: 16,
-    backgroundColor: c.green,
-    borderRadius: 22,
-    borderBottomRightRadius: 5,
-    alignSelf: "flex-end",
-    maxWidth: "88%",
-  },
-  aiMessage: {
-    padding: 20,
-    backgroundColor: c.paper,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: c.line,
-  },
-  userText: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 15,
-    color: "#FFF",
-    lineHeight: 23,
-  },
-  composer: {
-    marginHorizontal: 18,
-    marginBottom: 4,
-    padding: 14,
-    backgroundColor: c.paper,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "#D8DED2",
-  },
-  textarea: {
-    fontSize: 15,
-    fontFamily: "DMSans_400Regular",
-    color: c.ink,
-    minHeight: 42,
-    maxHeight: 110,
-    padding: 4,
-    paddingBottom: 10,
-  },
-  send: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    backgroundColor: c.green,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
-const markdown = StyleSheet.create({
-  body: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 15,
-    color: c.ink,
-    lineHeight: 24,
-  },
-  heading1: {
-    fontFamily: "Manrope_600SemiBold",
-    fontSize: 23,
-    lineHeight: 30,
-    marginVertical: 12,
-  },
-  heading2: {
-    fontFamily: "Manrope_600SemiBold",
-    fontSize: 20,
-    marginVertical: 10,
-  },
-  heading3: { fontFamily: "Manrope_600SemiBold", fontSize: 17 },
-  code_inline: { backgroundColor: c.bg, color: c.green },
-  fence: {
-    backgroundColor: c.bg,
-    borderColor: c.line,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 12,
-  },
-  link: { color: c.green },
-  blockquote: {
-    backgroundColor: c.bg,
-    borderColor: c.sage,
-    borderLeftWidth: 3,
-  },
-});
+
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: c.bg },
+    header: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      borderBottomWidth: 1,
+      borderColor: c.line,
+    },
+    headerTitle: { flex: 1 },
+    title: { fontFamily: "Manrope_600SemiBold", fontSize: 18, color: c.ink },
+    subtitle: { fontSize: 12, lineHeight: 20 },
+    feedWrap: { flex: 1 },
+    feed: { padding: 20, gap: 24, flexGrow: 1, paddingBottom: 24 },
+    welcome: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 32,
+      gap: 16,
+    },
+    welcomeTitle: {
+      textAlign: "center",
+      fontSize: 24,
+      lineHeight: 32,
+      letterSpacing: -0.6,
+    },
+    welcomeBody: { textAlign: "center", maxWidth: 280 },
+    suggestions: { width: "100%", maxWidth: 440, gap: 8, marginTop: 16 },
+    suggestion: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      padding: 12,
+      backgroundColor: c.paper,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: c.line,
+    },
+    suggestionIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: c.accentSoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    progress: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 8,
+    },
+    error: { padding: 16, backgroundColor: c.dangerSoft, borderRadius: 16 },
+    latest: { position: "absolute", bottom: 12, alignSelf: "center" },
+    composer: {
+      marginHorizontal: 16,
+      padding: 12,
+      backgroundColor: c.paper,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: c.line,
+    },
+    composerFocused: { borderColor: c.accent },
+    textarea: {
+      fontSize: 16,
+      fontFamily: "DMSans_400Regular",
+      color: c.ink,
+      minHeight: 52,
+      maxHeight: 144,
+      padding: 8,
+      textAlignVertical: "top",
+    },
+    model: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 44,
+      paddingHorizontal: 12,
+      gap: 8,
+      maxWidth: "100%",
+    },
+    modelName: { fontSize: 12, flexShrink: 1, color: c.ink },
+    send: {
+      width: 44,
+      height: 44,
+      borderRadius: 16,
+      backgroundColor: c.accent,
+      alignItems: "center",
+      justifyContent: "center",
+      marginLeft: 8,
+    },
+    footnote: {
+      textAlign: "center",
+      fontSize: 12,
+      lineHeight: 20,
+      paddingVertical: 8,
+    },
+  });

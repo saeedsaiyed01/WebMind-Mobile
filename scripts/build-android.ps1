@@ -12,6 +12,8 @@ try {
   Push-Location android
   try { ./gradlew.bat assembleRelease "-PreactNativeArchitectures=$Architectures" --max-workers=2 --console=plain; if ($LASTEXITCODE) { throw 'Android compilation failed.' } } finally { Pop-Location }
   New-Item -ItemType Directory -Force artifacts | Out-Null
-  Copy-Item -LiteralPath android/app/build/outputs/apk/release/app-release.apk -Destination artifacts/WebMind-v1.0.0.apk -Force
-  Get-FileHash -LiteralPath artifacts/WebMind-v1.0.0.apk -Algorithm SHA256
+  $appVersion = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+  $artifactPath = Join-Path artifacts "WebMind-v$appVersion.apk"
+  Copy-Item -LiteralPath android/app/build/outputs/apk/release/app-release.apk -Destination $artifactPath -Force
+  Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256
 } finally { Pop-Location }

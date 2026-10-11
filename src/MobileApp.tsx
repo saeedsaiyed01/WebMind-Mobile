@@ -12,6 +12,9 @@ import {
   Linking,
   AppState,
   BackHandler,
+  Keyboard,
+  Platform,
+  TextInput as NativeTextInput,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
@@ -26,25 +29,26 @@ import {
   ActivityIndicator,
   Portal,
   Dialog,
-  Searchbar,
 } from "react-native-paper";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
+  BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
-import { Manrope_600SemiBold } from "@expo-google-fonts/manrope";
-import {
-  DMSans_400Regular,
-  DMSans_500Medium,
-} from "@expo-google-fonts/dm-sans";
+import { Manrope_600SemiBold } from "@expo-google-fonts/manrope/600SemiBold";
+import { DMSans_400Regular } from "@expo-google-fonts/dm-sans/400Regular";
+import { DMSans_500Medium } from "@expo-google-fonts/dm-sans/500Medium";
 import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Auth } from "./Auth";
 import { Workspace, Library } from "./Workspace";
 import { Account } from "./Account";
 import { ChatScreen, ChatSession } from "./Chat";
+import { createSession } from "./chat/session";
+import { completeMobileOAuth } from "./auth/mobileOAuth";
 import { MemorySheet } from "./MemorySheet";
 import {
   request,
@@ -57,7 +61,12 @@ import {
   Model,
   Plan,
 } from "./api";
-import { colors as c, theme } from "./theme";
+import {
+  useAppTheme,
+  useThemedStyles,
+  type Palette,
+  AppearanceProvider,
+} from "./theme";
 import {
   Body,
   Heading,
@@ -66,7 +75,7 @@ import {
   Tap,
   Icon,
   Empty,
-  s,
+  useSharedStyles,
   IconName,
 } from "./components";
 
@@ -77,32 +86,49 @@ const defaultModel: Model = {
   name: "Gemini 2.5 Flash",
   provider: "google",
 };
-const emptyChat = (): ChatSession => ({ messages: [], attachments: [] });
+const emptyChat = createSession;
+const SheetSearchInput =
+  Platform.OS === "web" ? NativeTextInput : BottomSheetTextInput;
 export default function App() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AppearanceProvider>
+          <KeyboardProvider>
+            <AppContent />
+          </KeyboardProvider>
+        </AppearanceProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+function AppContent() {
+  const { theme, isDark } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
   const [fonts, fontError] = useFonts({
     Manrope_600SemiBold,
     DMSans_400Regular,
     DMSans_500Medium,
   });
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <PaperProvider theme={theme}>
-          <StatusBar style="dark" />
-          {!fonts && !fontError ? (
-            <View style={styles.splash}>
-              <Orb />
-              <Body>Making a little room for your ideas…</Body>
-            </View>
-          ) : (
-            <MobileApp />
-          )}
-        </PaperProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <PaperProvider theme={theme}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      {!fonts && !fontError ? (
+        <View style={styles.splash}>
+          <Orb />
+          <Body>Making a little room for your ideas…</Body>
+        </View>
+      ) : (
+        <MobileApp />
+      )}
+    </PaperProvider>
   );
 }
 function MobileApp() {
+  const { colors: c } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+  const s = useSharedStyles();
+
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [sessionError, setSessionError] = useState("");
@@ -113,7 +139,7 @@ function MobileApp() {
     params.tab || "",
   )
     ? (params.tab as Tab)
-    : "home";
+    : "chat";
   const setTab = useCallback(
     (next: Tab) => router.navigate({ pathname: "/", params: { tab: next } }),
     [router],
@@ -138,6 +164,7 @@ function MobileApp() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const sheet = useRef<BottomSheet>(null);
+  const insets = useSafeAreaInsets();
   const points = useMemo(() => ["78%"], []);
   const mounted = useRef(true);
   const inFlight = useRef(false);
@@ -249,24 +276,19 @@ function MobileApp() {
   }, [user, refresh]);
   useEffect(() => {
     function handle(url: string) {
-      try {
-        const parsed = new URL(url);
-        const allowed =
-          [
-            "webmind.space",
-            "www.webmind.space",
-            "web-mind.vercel.app",
-          ].includes(parsed.hostname) || parsed.protocol === "webmind:";
-        const value = parsed.searchParams.get("token");
-        if (allowed && value) onSession(value).catch((e) => notify(e.message));
-      } catch {}
+      completeMobileOAuth(url, onSession)
+        .then((completed) => {
+          if (completed)
+            router.replace({ pathname: "/", params: { tab: "chat" } });
+        })
+        .catch((e: Error) => notify(e.message));
     }
     Linking.getInitialURL().then((url) => {
       if (url) handle(url);
     });
     const event = Linking.addEventListener("url", ({ url }) => handle(url));
     return () => event.remove();
-  }, [onSession, notify]);
+  }, [onSession, notify, router]);
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active" && user) refresh();
@@ -301,7 +323,7 @@ function MobileApp() {
       notify("Finish or stop the current answer first.");
       return;
     }
-    setSession({ ...emptyChat(), attachments: item ? [item] : [] });
+    setSession(createSession(item ? [item] : []));
     setTab("chat");
   }
   function openConversation(id: string) {
@@ -311,6 +333,7 @@ function MobileApp() {
       return;
     }
     setSession((prev) => ({
+      ...emptyChat(),
       id,
       historyRequest: (prev.historyRequest || 0) + 1,
       messages: [],
@@ -359,7 +382,7 @@ function MobileApp() {
     return (
       <View style={styles.splash}>
         <Orb />
-        <ActivityIndicator color={c.green} />
+        <ActivityIndicator color={c.accent} />
         <Body>Finding your workspace…</Body>
       </View>
     );
@@ -392,7 +415,7 @@ function MobileApp() {
             style={{
               flex: 1,
               width: "100%",
-              maxWidth: 720,
+              maxWidth: 600,
               alignSelf: "center",
             }}
           >
@@ -481,10 +504,15 @@ function MobileApp() {
               snapPoints={points}
               enableDynamicSizing={false}
               enablePanDownToClose
+              topInset={insets.top}
+              keyboardBehavior="interactive"
+              keyboardBlurBehavior="restore"
+              enableBlurKeyboardOnGesture
+              android_keyboardInputMode="adjustResize"
               onClose={() => setChooser(null)}
               backdropComponent={backdrop}
               backgroundStyle={{ backgroundColor: c.bg, borderRadius: 30 }}
-              handleIndicatorStyle={{ backgroundColor: "#CED4C9", width: 34 }}
+              handleIndicatorStyle={{ backgroundColor: c.line, width: 34 }}
             >
               <BottomSheetScrollView
                 keyboardShouldPersistTaps="handled"
@@ -497,10 +525,10 @@ function MobileApp() {
                 <View style={s.between}>
                   <Label>
                     {chooser === "models"
-                      ? "A DIFFERENT PERSPECTIVE"
+                      ? "AI MODELS"
                       : chooser === "attach"
-                        ? "GIVE YOUR THOUGHT CONTEXT"
-                        : "THOUGHTS WORTH RETURNING TO"}
+                        ? "SAVED MEMORIES"
+                        : "CHAT HISTORY"}
                   </Label>
                   <Tap label="Close sheet" onPress={() => setChooser(null)}>
                     <Icon name="x" />
@@ -508,10 +536,10 @@ function MobileApp() {
                 </View>
                 <Heading style={{ fontSize: 28 }}>
                   {chooser === "models"
-                    ? "Choose a thinking partner."
+                    ? "Choose a model"
                     : chooser === "attach"
-                      ? "Connect your memories."
-                      : "Your conversations."}
+                      ? "Add context"
+                      : "Conversations"}
                 </Heading>
                 {chooser === "models" ? (
                   models.map((item) => (
@@ -528,12 +556,12 @@ function MobileApp() {
                           s.card,
                           s.row,
                           model.id === item.id && {
-                            borderColor: c.green,
-                            backgroundColor: "#EAF0E3",
+                            borderColor: c.accent,
+                            backgroundColor: c.accentSoft,
                           },
                         ]}
                       >
-                        <Icon name="cpu" color={c.green} />
+                        <Icon name="cpu" color={c.accent} />
                         <View style={{ flex: 1 }}>
                           <Body
                             style={{
@@ -543,19 +571,19 @@ function MobileApp() {
                           >
                             {item.name.replace(/ \(.*\)/, "")}
                           </Body>
-                          <Body style={{ fontSize: 11 }}>
+                          <Body style={{ fontSize: 12 }}>
                             {item.description || item.provider}
                           </Body>
                         </View>
                         {model.id === item.id && (
-                          <Icon name="check" color={c.green} />
+                          <Icon name="check" color={c.accent} />
                         )}
                       </View>
                     </Tap>
                   ))
                 ) : (
                   <>
-                    <Searchbar
+                    <SheetSearchInput
                       value={query}
                       onChangeText={setQuery}
                       placeholder={
@@ -563,8 +591,20 @@ function MobileApp() {
                           ? "Search saved memories"
                           : "Search conversations"
                       }
-                      style={{ backgroundColor: "#EEF0E8" }}
-                      inputStyle={{ fontSize: 13 }}
+                      accessibilityLabel={
+                        chooser === "attach"
+                          ? "Search saved memories"
+                          : "Search conversations"
+                      }
+                      placeholderTextColor={c.muted}
+                      style={{
+                        backgroundColor: c.subtle,
+                        color: c.ink,
+                        fontSize: 16,
+                        padding: 16,
+                        borderRadius: 16,
+                        minHeight: 52,
+                      }}
                     />
                     {chooser === "attach" ? (
                       <>
@@ -602,8 +642,8 @@ function MobileApp() {
                                     s.card,
                                     s.row,
                                     selected && {
-                                      borderColor: c.green,
-                                      backgroundColor: c.sage,
+                                      borderColor: c.accent,
+                                      backgroundColor: c.accentSoft,
                                     },
                                   ]}
                                 >
@@ -613,7 +653,7 @@ function MobileApp() {
                                         ? "file-text"
                                         : "bookmark"
                                     }
-                                    color={c.green}
+                                    color={c.accent}
                                   />
                                   <Body
                                     lines={1}
@@ -624,7 +664,7 @@ function MobileApp() {
                                   <Icon
                                     name={selected ? "check-circle" : "circle"}
                                     size={18}
-                                    color={c.green}
+                                    color={c.accent}
                                   />
                                 </View>
                               </Tap>
@@ -673,12 +713,15 @@ function MobileApp() {
                                 style={{ flex: 1 }}
                               >
                                 <View style={s.row}>
-                                  <Icon name="message-circle" color={c.green} />
+                                  <Icon
+                                    name="message-circle"
+                                    color={c.accent}
+                                  />
                                   <View style={{ flex: 1 }}>
                                     <Body lines={2} style={{ color: c.ink }}>
                                       {item.title}
                                     </Body>
-                                    <Body style={{ fontSize: 11 }}>
+                                    <Body style={{ fontSize: 12 }}>
                                       {new Date(
                                         item.lastMessageAt,
                                       ).toLocaleDateString()}
@@ -746,7 +789,7 @@ function MobileApp() {
         visible={!!snack}
         onDismiss={() => setSnack("")}
         duration={4500}
-        style={{ marginBottom: user ? 90 : 20, backgroundColor: c.green }}
+        style={{ marginBottom: user ? 90 : 20, backgroundColor: c.accent }}
         action={{ label: "Dismiss", onPress: () => setSnack("") }}
       >
         {snack}
@@ -755,13 +798,30 @@ function MobileApp() {
   );
 }
 function Navigation({ tab, select }: { tab: Tab; select: (tab: Tab) => void }) {
+  const { colors: c } = useAppTheme();
+  const styles = useThemedStyles(makeStyles);
+
   const insets = useSafeAreaInsets();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () =>
+      setKeyboardVisible(true),
+    );
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setKeyboardVisible(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const tabs: { id: Tab; icon: IconName; label: string }[] = [
-    { id: "home", icon: "grid", label: "Workspace" },
+    { id: "home", icon: "grid", label: "Home" },
     { id: "library", icon: "layers", label: "Library" },
-    { id: "chat", icon: "message-circle", label: "Think" },
-    { id: "account", icon: "user", label: "You" },
+    { id: "chat", icon: "message-circle", label: "Chat" },
+    { id: "account", icon: "user", label: "Account" },
   ];
+  if (keyboardVisible) return null;
   return (
     <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       {tabs.map((item) => (
@@ -775,21 +835,21 @@ function Navigation({ tab, select }: { tab: Tab; select: (tab: Tab) => void }) {
             <View
               style={[
                 styles.navIcon,
-                tab === item.id && { backgroundColor: c.sage },
+                tab === item.id && { backgroundColor: c.accentSoft },
               ]}
             >
               <Icon
                 name={item.icon}
                 size={20}
-                color={tab === item.id ? c.green : c.muted}
+                color={tab === item.id ? c.accent : c.muted}
               />
             </View>
             <Text
               style={{
                 fontFamily:
                   tab === item.id ? "DMSans_500Medium" : "DMSans_400Regular",
-                fontSize: 10,
-                color: tab === item.id ? c.green : c.muted,
+                fontSize: 12,
+                color: tab === item.id ? c.accent : c.muted,
               }}
             >
               {item.label}
@@ -800,27 +860,28 @@ function Navigation({ tab, select }: { tab: Tab; select: (tab: Tab) => void }) {
     </View>
   );
 }
-const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    backgroundColor: c.bg,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 20,
-  },
-  nav: {
-    flexDirection: "row",
-    paddingTop: 10,
-    backgroundColor: "#FCFCF8",
-    borderTopWidth: 1,
-    borderColor: c.line,
-    paddingHorizontal: 14,
-  },
-  navIcon: {
-    width: 52,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    splash: {
+      flex: 1,
+      backgroundColor: c.bg,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 20,
+    },
+    nav: {
+      flexDirection: "row",
+      paddingTop: 8,
+      backgroundColor: c.paper,
+      borderTopWidth: 1,
+      borderColor: c.line,
+      paddingHorizontal: 14,
+    },
+    navIcon: {
+      width: 52,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 12,
+    },
+  });

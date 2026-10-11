@@ -51,4 +51,6 @@ audit.json
 .claude/
 .env
 .env.*
+credentials.json
+.easignore.local
 

@@ -91,6 +91,7 @@ export async function request<T = any>(
   );
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort);
+  if (signal?.aborted) controller.abort();
   try {
     const form = body instanceof FormData;
     const response = await fetch(API_URL + path, {
@@ -119,8 +120,8 @@ export async function request<T = any>(
     }
     if (!response.ok) {
       if (
-        response.status === 403 &&
-        /token|authorization/i.test(data.message || "")
+        (response.status === 401 || response.status === 403) &&
+        /token|authorization/i.test(data.message || data.error || "")
       )
         onExpired?.();
       throw new ApiError(
@@ -204,6 +205,11 @@ export function chat(
         try {
           data = JSON.parse(xhr.responseText);
         } catch {}
+        if (
+          (xhr.status === 401 || xhr.status === 403) &&
+          /token|authorization/i.test(data.message || data.error || "")
+        )
+          onExpired?.();
         reject(
           new ApiError(
             data.error || data.message || "Unable to send message.",
