@@ -314,6 +314,7 @@ function MobileApp() {
     return () => sub.remove();
   }, [tab, chooser, memoryVisible, setTab]);
   function openChooser(next: "models" | "attach" | "history") {
+    Keyboard.dismiss();
     setQuery("");
     setChooser(next);
   }

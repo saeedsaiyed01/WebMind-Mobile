@@ -135,6 +135,7 @@ export function Tap({
         style={{
           opacity: disabled ? 0.45 : 1,
           minHeight: 44,
+          minWidth: 44,
           justifyContent: "center",
         }}
       >
